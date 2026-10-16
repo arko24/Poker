@@ -1,0 +1,36 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--tg-secondary-bg-color, #2b2f36);
+  color: var(--tg-text-color, #ffffff);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.coin {
+  font-size: 13px;
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.claim {
+  margin-left: 4px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--tg-button-color, #3390ec);
+  color: var(--tg-button-text-color, #ffffff);
+}
+
+.claim:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

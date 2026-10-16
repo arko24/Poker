@@ -1,0 +1,65 @@
+# Free-tier liveness scheduler for the Telegram Hold'em Mini App.
+#
+# Serverless functions cannot run timers, so turn timeouts are deadline-driven
+# and enforced lazily when a request comes in. If every human client closes the
+# app mid-hand nothing would advance on its own. This workflow closes that gap
+# by POSTing to /api/cron/tick once per minute; the handler auto-folds/-checks
+# any seat whose act_deadline has passed and runs pending bot turns.
+#
+# Why GitHub Actions and not Vercel Cron: the Vercel Hobby (free) plan does not
+# run per-minute cron jobs, so a "* * * * *" schedule in vercel.json would be
+# silently ignored on the free tier. GitHub Actions scheduled workflows run the
+# per-minute cadence for free and live in this same repo. See README.md and
+# design.md Finding 1. (On a Vercel Pro plan, a vercel.json cron pointing at the
+# same endpoint is a drop-in replacement for this workflow.)
+#
+# Required repository configuration (Settings -> Secrets and variables -> Actions):
+#   - Secret  CRON_SECRET  : must match the CRON_SECRET env var set in Vercel.
+#   - Variable MINI_APP_URL : the deployed base URL, e.g. https://your-app.vercel.app
+#     (You may instead store MINI_APP_URL as a secret; update the reference below.)
+
+name: liveness-tick
+
+on:
+  schedule:
+    # Every minute (UTC). GitHub's scheduler is best-effort and can be delayed
+    # under load; that latency is acceptable for a play-money hobby game.
+    - cron: "* * * * *"
+  # Allow a manual run from the Actions tab for testing.
+  workflow_dispatch:
+
+# Avoid piling up overlapping runs if a tick is slow or the scheduler catches up.
+concurrency:
+  group: liveness-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: POST /api/cron/tick
+        env:
+          MINI_APP_URL: ${{ vars.MINI_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$MINI_APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "MINI_APP_URL (variable) and CRON_SECRET (secret) must be configured." >&2
+            exit 1
+          fi
+          # Trim any trailing slash so the URL joins cleanly.
+          base="${MINI_APP_URL%/}"
+          code=$(curl --silent --show-error --fail-with-body \
+            --max-time 60 \
+            --request POST \
+            --header "x-cron-secret: $CRON_SECRET" \
+            --output /tmp/tick-body.txt \
+            --write-out "%{http_code}" \
+            "$base/api/cron/tick") || true
+          echo "HTTP $code"
+          cat /tmp/tick-body.txt || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "Tick did not return 200." >&2
+            exit 1
+          fi
