@@ -84,9 +84,30 @@ export function initTelegram(): void {
  * Freshly read initData string for POST /api/auth. Read fresh on every (re)auth
  * so a long-backgrounded app gets the latest value. Empty string when not
  * running inside Telegram.
+ *
+ * DEV BYPASS: when NOT inside Telegram and NEXT_PUBLIC_ALLOW_DEV_AUTH="true",
+ * return a sentinel "dev:<id>" string so the app can authenticate in a plain
+ * browser for testing. The server still only honors this if its own
+ * ALLOW_DEV_AUTH="true" flag is set, so this is safe to ship — a production
+ * deployment without ALLOW_DEV_AUTH rejects it. The id can be overridden with
+ * ?dev=2 in the URL to simulate a second player in another tab.
  */
 export function getInitData(): string {
-  return getWebApp()?.initData ?? "";
+  const real = getWebApp()?.initData ?? "";
+  if (real.length > 0) return real;
+
+  if (
+    typeof process !== "undefined" &&
+    process.env.NEXT_PUBLIC_ALLOW_DEV_AUTH === "true"
+  ) {
+    let id = "1";
+    if (typeof window !== "undefined") {
+      const fromUrl = new URLSearchParams(window.location.search).get("dev");
+      if (fromUrl && /^\d+$/.test(fromUrl)) id = fromUrl;
+    }
+    return `dev:${id}`;
+  }
+  return "";
 }
 
 /** True when running inside the Telegram WebApp container. */
